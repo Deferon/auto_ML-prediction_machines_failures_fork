@@ -1,4 +1,0 @@
-FROM python:3.11-slim
-RUN pip install --no-cache-dir "mlflow>=2.9.0"
-WORKDIR /app
-EXPOSE 5000

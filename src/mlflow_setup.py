@@ -1,58 +1,32 @@
-"""Single MLflow backend for this project (SQLite + local artifacts)."""
+"""Configure MLflow without deleting or rewriting existing tracking stores."""
+
+from pathlib import Path
+from urllib.parse import urlparse
+
 import mlflow
 from mlflow.exceptions import MlflowException
 
-from src.config import (
-    MLFLOW_ARTIFACTS_DIR,
-    MLFLOW_ARTIFACTS_URI,
-    MLFLOW_DB,
-    MLFLOW_EXPERIMENT_NAME,
-    MLFLOW_TRACKING_URI,
-)
+from src.config import ARTIFACTS_DIR, MLFLOW_EXPERIMENT_NAME, MLFLOW_TRACKING_URI
 
 
-def _normalize_artifact_uri(uri: str) -> str:
-    return uri.replace("\\", "/").rstrip("/").removeprefix("file:").removeprefix("//")
-
-
-def _artifact_uri_matches(actual: str, expected: str) -> bool:
-    actual_norm = _normalize_artifact_uri(actual)
-    expected_norm = _normalize_artifact_uri(expected)
-    return actual_norm == expected_norm or actual_norm.endswith("/artifacts/mlartifacts")
-
-
-def _reset_tracking_store() -> None:
-    """Drop local SQLite store when experiment paths belong to another machine/folder."""
-    if MLFLOW_DB.exists():
-        MLFLOW_DB.unlink()
-
-
-def setup_mlflow() -> None:
-    """Configure tracking URI and ensure experiment uses project artifact paths."""
-    MLFLOW_ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-
-    experiment = mlflow.get_experiment_by_name(MLFLOW_EXPERIMENT_NAME)
-    if experiment is not None and not _artifact_uri_matches(
-        experiment.artifact_location, MLFLOW_ARTIFACTS_URI
-    ):
-        _reset_tracking_store()
-        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-
-    if mlflow.get_experiment_by_name(MLFLOW_EXPERIMENT_NAME) is None:
+def setup_mlflow(
+    tracking_uri: str | None = None,
+    artifact_dir: Path | None = None,
+    experiment_name: str = MLFLOW_EXPERIMENT_NAME,
+) -> None:
+    """Reuse experiments; let remote servers choose their artifact location."""
+    uri = tracking_uri or MLFLOW_TRACKING_URI
+    mlflow.set_tracking_uri(uri)
+    artifact_uri = None
+    if urlparse(uri).scheme not in {"http", "https", "databricks"}:
+        local_artifacts = (artifact_dir or ARTIFACTS_DIR / "mlartifacts").resolve()
+        local_artifacts.mkdir(parents=True, exist_ok=True)
+        artifact_uri = local_artifacts.as_uri()
+    if mlflow.get_experiment_by_name(experiment_name) is None:
         try:
-            mlflow.create_experiment(
-                MLFLOW_EXPERIMENT_NAME,
-                artifact_location=MLFLOW_ARTIFACTS_URI,
-            )
-        except MlflowException as exc:
-            if "already exists" not in str(exc).lower():
+            mlflow.create_experiment(experiment_name, artifact_location=artifact_uri)
+        except MlflowException:
+            # Another worker may have created it between lookup and creation.
+            if mlflow.get_experiment_by_name(experiment_name) is None:
                 raise
-            _reset_tracking_store()
-            mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-            mlflow.create_experiment(
-                MLFLOW_EXPERIMENT_NAME,
-                artifact_location=MLFLOW_ARTIFACTS_URI,
-            )
-
-    mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
+    mlflow.set_experiment(experiment_name)

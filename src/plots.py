@@ -1,13 +1,14 @@
 """Generate evaluation plots for artifacts."""
+
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
-import numpy as np
 import seaborn as sns
 from sklearn.metrics import RocCurveDisplay, confusion_matrix
 
 
-def save_confusion_matrix(y_true, y_pred, path: Path) -> None:
+def save_confusion_matrix(y_true: Any, y_pred: Any, path: Path) -> None:
     cm = confusion_matrix(y_true, y_pred)
     fig, ax = plt.subplots(figsize=(6, 5))
     sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", ax=ax)
@@ -20,7 +21,7 @@ def save_confusion_matrix(y_true, y_pred, path: Path) -> None:
     plt.close(fig)
 
 
-def save_roc_curve(y_true, y_proba, path: Path) -> None:
+def save_roc_curve(y_true: Any, y_proba: Any, path: Path) -> None:
     fig, ax = plt.subplots(figsize=(6, 5))
     RocCurveDisplay.from_predictions(y_true, y_proba, ax=ax)
     ax.set_title("ROC Curve")
@@ -32,7 +33,7 @@ def save_roc_curve(y_true, y_proba, path: Path) -> None:
 
 def save_feature_importance(importances: dict, path: Path, top_n: int = 15) -> None:
     items = sorted(importances.items(), key=lambda x: x[1], reverse=True)[:top_n]
-    names, values = zip(*items) if items else ([], [])
+    names, values = zip(*items, strict=False) if items else ([], [])
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.barh(names[::-1], values[::-1], color="steelblue")
     ax.set_xlabel("Importance")
@@ -60,8 +61,14 @@ def save_model_metrics_chart(path: Path, metrics: dict) -> None:
         title += f" · training {train_time:.1f} s"
     ax.set_title(title, fontsize=12, fontweight="bold")
     ax.grid(axis="x", alpha=0.3)
-    for bar, value in zip(bars, values):
-        ax.text(value + 0.02, bar.get_y() + bar.get_height() / 2, f"{value:.3f}", va="center", fontsize=10)
+    for bar, value in zip(bars, values, strict=False):
+        ax.text(
+            value + 0.02,
+            bar.get_y() + bar.get_height() / 2,
+            f"{value:.3f}",
+            va="center",
+            fontsize=10,
+        )
     fig.tight_layout()
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=120, bbox_inches="tight")

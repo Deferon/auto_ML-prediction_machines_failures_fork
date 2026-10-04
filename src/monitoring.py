@@ -11,10 +11,11 @@ from src.config import RAW_NUMERIC_FEATURES, TARGET_COL
 PSI_STABLE = 0.1
 PSI_WARNING = 0.25
 
+
 def compute_data_quality_report(df: pd.DataFrame, label: str = "train") -> dict:
     """
     Формирует отчет о качестве данных переданного датасета.
-    
+
     Возвращает информацию о количестве строк в датасете (rows), количество пустых значений (null_counts),
     арифмитическое среднее и стандартное отклонение для колонок с числовым типом данных.
     """
@@ -32,9 +33,7 @@ def compute_data_quality_report(df: pd.DataFrame, label: str = "train") -> dict:
     return report
 
 
-def population_stability_index(
-    expected: pd.Series, actual: pd.Series, bins: int = 10
-) -> float:
+def population_stability_index(expected: pd.Series, actual: pd.Series, bins: int = 10) -> float:
     """
     Рассчитывает индекс стабильности популяции (PSI) для оценки смещения распределений.
 
@@ -42,29 +41,33 @@ def population_stability_index(
     (например, за текущий период) отличается от ожидаемого распределения (например, за базовый период).
     Метрика широко используется в кредитном скоринге и мониторинге моделей машинного обучения
     для обнаружения дрейфа признаков.
-    
+
     Интерпретация результатов (эмпирическое правило):
         - PSI < 0.1   : Распределения практически идентичны (изменений нет).
         - 0.1 <= PSI < 0.25 : Небольшой сдвиг (требуется внимание).
         - PSI >= 0.25  : Значительный сдвиг (распределение изменилось кардинально, модель требует переобучения).
     """
-    breakpoints = np.linspace(
-        min(expected.min(), actual.min()),
-        max(expected.max(), actual.max()),
-        bins + 1,
-    )
-    expected_pct = pd.cut(expected, breakpoints, duplicates="drop").value_counts(
-        normalize=True
-    )
-    actual_pct = pd.cut(actual, breakpoints, duplicates="drop").value_counts(
-        normalize=True
-    )
-    aligned = pd.concat([expected_pct, actual_pct], axis=1, join="outer").fillna(0.0001)
-    aligned.columns = ["expected", "actual"]
-    psi = ((aligned["actual"] - aligned["expected"]) * np.log(
-        aligned["actual"] / aligned["expected"]
-    )).sum()
-    return float(psi)
+    if bins < 2:
+        raise ValueError("PSI requires at least two bins")
+    reference = np.asarray(expected, dtype=float)
+    current = np.asarray(actual, dtype=float)
+    if not reference.size or not current.size:
+        raise ValueError("PSI requires nonempty samples")
+    if not np.isfinite(reference).all() or not np.isfinite(current).all():
+        raise ValueError("PSI requires finite values")
+    # Use reference-only boundaries; overflow bins detect values outside its range.
+    lower, upper = reference.min(), reference.max()
+    if lower == upper:
+        edges = np.array([-np.inf, lower, np.nextafter(upper, np.inf), np.inf])
+    else:
+        edges = np.concatenate(([-np.inf], np.linspace(lower, upper, bins + 1), [np.inf]))
+    reference_counts = np.histogram(reference, bins=edges)[0]
+    current_counts = np.histogram(current, bins=edges)[0]
+    reference_pct = np.maximum(reference_counts / reference.size, 1e-6)
+    current_pct = np.maximum(current_counts / current.size, 1e-6)
+    reference_pct /= reference_pct.sum()
+    current_pct /= current_pct.sum()
+    return float(np.sum((current_pct - reference_pct) * np.log(current_pct / reference_pct)))
 
 
 def compare_distributions(reference: pd.DataFrame, current: pd.DataFrame) -> dict:
@@ -90,12 +93,12 @@ def infrastructure_snapshot() -> dict:
     mem = psutil.virtual_memory()
     return {
         "cpu_percent": psutil.cpu_percent(interval=0.1),
-        "cpu_percent": psutil.cpu_percent(interval=0.1),
         "ram_total_gb": round(mem.total / (1024**3), 2),
         "ram_used_percent": mem.percent,
         "swap_memory_used": psutil.swap_memory().used,
-        "swap_memory_free": psutil.swap_memory().free
+        "swap_memory_free": psutil.swap_memory().free,
     }
+
 
 def interpret_psi(psi: float) -> str:
     """Classify drift severity by Population Stability Index."""
@@ -184,7 +187,7 @@ def build_inference_monitoring_summary(
     performance: dict[str, Any] = {}
     if inference_time_sec is not None:
         performance["inference_time_sec"] = round(inference_time_sec, 3)
-        if predictions_rows:
+        if predictions_rows and inference_time_sec > 0:
             performance["rows_per_sec"] = round(predictions_rows / inference_time_sec, 1)
     if pipeline_time_sec is not None:
         performance["pipeline_time_sec"] = round(pipeline_time_sec, 3)

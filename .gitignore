@@ -12,6 +12,12 @@ env/
 dist/
 build/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.tooling/
+.build/
+coverage.xml
 .coverage
 htmlcov/
 
