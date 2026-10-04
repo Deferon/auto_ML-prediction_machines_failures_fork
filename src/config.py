@@ -1,16 +1,18 @@
-"""Project configuration."""
+"""Project defaults; paths can be overridden for deployed installations."""
+
+import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = PROJECT_ROOT / "keis7-main"
+DATA_DIR = Path(os.environ.get("ML_DATA_DIR", PROJECT_ROOT / "keis7-main")).resolve()
 TRAIN_CSV = DATA_DIR / "train.csv"
 TEST_CSV = DATA_DIR / "test.csv"
-ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
+ARTIFACTS_DIR = Path(os.environ.get("ML_ARTIFACTS_DIR", PROJECT_ROOT / "artifacts")).resolve()
 MLFLOW_DB = ARTIFACTS_DIR / "mlflow.db"
 MLFLOW_ARTIFACTS_DIR = ARTIFACTS_DIR / "mlartifacts"
-MLFLOW_TRACKING_URI = f"sqlite:///{MLFLOW_DB.resolve().as_posix()}"
-MLFLOW_ARTIFACTS_URI = f"file:///{MLFLOW_ARTIFACTS_DIR.resolve().as_posix()}"
-MLFLOW_EXPERIMENT_NAME = "machine_failure_prediction"
+MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", f"sqlite:///{MLFLOW_DB.as_posix()}")
+MLFLOW_ARTIFACTS_URI = MLFLOW_ARTIFACTS_DIR.as_uri()
+MLFLOW_EXPERIMENT_NAME = os.environ.get("MLFLOW_EXPERIMENT_NAME", "machine_failure_prediction")
 
 TARGET_COL = "Machine failure"
 ID_COL = "id"
@@ -33,11 +35,12 @@ ENGINEERED_FEATURES = [
     "air_mass",
     "air_heat_power [kW]",
     "efficiency [%]",
-    "total_failures_cum",
 ]
 
-MODEL_FEATURES = RAW_NUMERIC_FEATURES + FAILURE_FLAGS + ENGINEERED_FEATURES + [TYPE_COL]
-CAT_FEATURES = [TYPE_COL, *FAILURE_FLAGS]
+# Failure flags describe the outcome and must never be predictors.
+MODEL_FEATURES = RAW_NUMERIC_FEATURES + ENGINEERED_FEATURES + [TYPE_COL]
+CAT_FEATURES = [TYPE_COL]
+FEATURE_SCHEMA_VERSION = 2
 
 CATBOOST_PARAMS = {
     "iterations": 500,
@@ -47,7 +50,8 @@ CATBOOST_PARAMS = {
     "loss_function": "Logloss",
     "eval_metric": "AUC",
     "random_seed": 42,
-    "verbose": 100,
+    "verbose": False,
+    "allow_writing_files": False,
     "early_stopping_rounds": 100,
     "auto_class_weights": "Balanced",
 }

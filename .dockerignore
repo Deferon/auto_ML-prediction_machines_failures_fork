@@ -1,0 +1,16 @@
+.git
+.venv
+.tooling
+.cache
+.build
+__pycache__
+**/__pycache__
+.pytest_cache
+.mypy_cache
+.ruff_cache
+artifacts
+reference-material
+docs
+tests
+*.pptx
+.env

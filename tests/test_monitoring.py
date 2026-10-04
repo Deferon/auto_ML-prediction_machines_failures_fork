@@ -1,6 +1,8 @@
+import numpy as np
+import pandas as pd
 import pytest
 
-from src.monitoring import evaluate_drift, interpret_psi
+from src.monitoring import evaluate_drift, interpret_psi, population_stability_index
 
 
 def test_interpret_psi_stable():
@@ -33,3 +35,21 @@ def test_evaluate_drift_with_alert():
     result = evaluate_drift(drift)
     assert result["overall_status"] == "critical"
     assert len(result["alerts"]) == 1
+
+
+@pytest.mark.parametrize("values", [[1] * 10, [0, 1, 2, 3, 4]])
+def test_identical_distributions_have_zero_psi(values):
+    assert population_stability_index(pd.Series(values), pd.Series(values)) == pytest.approx(0)
+
+
+@pytest.mark.parametrize("reference,current", [([0] * 10, [10] * 10), ([0, 1, 2], [30, 40, 50])])
+def test_disjoint_distributions_produce_finite_alert(reference, current):
+    psi = population_stability_index(pd.Series(reference), pd.Series(current))
+    assert np.isfinite(psi)
+    assert interpret_psi(psi) == "critical"
+
+
+@pytest.mark.parametrize("values", [[], [np.nan], [np.inf]])
+def test_invalid_psi_input_rejected(values):
+    with pytest.raises(ValueError):
+        population_stability_index(pd.Series([1, 2]), pd.Series(values))
