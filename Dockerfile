@@ -21,7 +21,8 @@ ENV PATH="/app/.venv/bin:$PATH" \
     ML_DATA_DIR=/app/keis7-main \
     ML_ARTIFACTS_DIR=/app/artifacts \
     MLFLOW_TRACKING_URI=sqlite:////app/artifacts/mlflow.db
-RUN mkdir -p /app/artifacts && chown app:app /app/artifacts
+# MLflow 2.x initializes ./mlruns even when an experiment has an explicit artifact URI.
+RUN mkdir -p /app/artifacts /app/mlruns && chown app:app /app/artifacts /app/mlruns
 USER app
 ENTRYPOINT ["python", "-m"]
 CMD ["src.train", "--smoke"]
